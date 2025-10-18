@@ -28,7 +28,7 @@ type Message struct {
 
 var nextUserID int64 = 0
 
-func handleConnection(c net.Conn, manager *ClientManager) {
+func handleConnection(c net.Conn, manager *ClientManager, queue *MessageQueue) {
 	userID := atomic.AddInt64(&nextUserID, 1)
 	user := &User{
 		ID:   userID,
@@ -42,6 +42,8 @@ func handleConnection(c net.Conn, manager *ClientManager) {
 	defer log.Printf("User %d disconnected", user.ID)
 
 	c.Write([]byte(fmt.Sprintf("Welcome, User %d\n", user.ID)))
+
+	queue.ProcessOfflineMessages(user)
 
 	reader := bufio.NewReader(c)
 	for {
@@ -61,7 +63,7 @@ func handleConnection(c net.Conn, manager *ClientManager) {
 			errResponse := fmt.Sprintf("%s\n", err.Error())
 			c.Write([]byte(errResponse))
 		} else {
-			response, err := sendMessage(user.ID, destID, messageStr, manager)
+			response, err := sendMessage(user.ID, destID, messageStr, manager, queue)
 			if err != nil {
 				c.Write([]byte(err.Error()))
 				continue
@@ -91,7 +93,7 @@ func validateMessage(message string) (int64, string, error) {
 	return destID, messageStr, nil
 }
 
-func sendMessage(srcID int64, destID int64, messageStr string, manager *ClientManager) (string, error) {
+func sendMessage(srcID int64, destID int64, messageStr string, manager *ClientManager, queue *MessageQueue) (string, error) {
 	message := &Message{
 		Source:      srcID,
 		Destination: destID,
@@ -99,15 +101,7 @@ func sendMessage(srcID int64, destID int64, messageStr string, manager *ClientMa
 		TimeStamp:   helper.FormatTime(time.Now()),
 	}
 
-	sendErr := MessageRouter(message, manager)
-	if sendErr != nil {
-		res := fmt.Sprintf("Message to User %d was not delivered. Reason: %v\n", message.Destination, sendErr)
-		log.Printf("Message from User %d to User %d was not delivered. Reason: %v\n", message.Source, message.Destination, sendErr)
-
-		return "", errors.New(res)
-	}
-
-	res := fmt.Sprintf("Message to User %d was successfully delivered.\n", message.Destination)
+	res := MessageRouter(message, manager, queue)
 	log.Printf("Message from User %d to User %d at %v\n", message.Source, message.Destination, message.TimeStamp)
 
 	return res, nil

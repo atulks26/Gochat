@@ -19,6 +19,8 @@ func StartServer(addr string) (net.Listener, error) {
 func AcceptConnections(l net.Listener, manager *ClientManager) {
 	defer l.Close()
 
+	queue := NewMessageQueue()
+
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -26,6 +28,6 @@ func AcceptConnections(l net.Listener, manager *ClientManager) {
 			return
 		}
 
-		go handleConnection(c, manager)
+		go handleConnection(c, manager, queue)
 	}
 }
