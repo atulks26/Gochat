@@ -21,7 +21,7 @@ func main() {
 
 	fmt.Println("Server initialized")
 
-	manager := server.NewClientManager()
+	manager := server.NewOnlineClientManager()
 
 	server.AcceptConnections(listener, manager)
 }

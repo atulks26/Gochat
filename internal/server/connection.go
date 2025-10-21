@@ -15,8 +15,9 @@ import (
 )
 
 type User struct {
-	ID   int64
-	Conn net.Conn
+	ID       int64
+	Username string
+	Conn     net.Conn
 }
 
 type Message struct {
@@ -28,7 +29,7 @@ type Message struct {
 
 var nextUserID int64 = 0
 
-func handleConnection(c net.Conn, manager *ClientManager, queue *MessageQueue) {
+func handleConnection(c net.Conn, manager *OnlineClientManager, queue *MessageQueue) {
 	userID := atomic.AddInt64(&nextUserID, 1)
 	user := &User{
 		ID:   userID,
@@ -93,7 +94,7 @@ func validateMessage(message string) (int64, string, error) {
 	return destID, messageStr, nil
 }
 
-func sendMessage(srcID int64, destID int64, messageStr string, manager *ClientManager, queue *MessageQueue) (string, error) {
+func sendMessage(srcID int64, destID int64, messageStr string, manager *OnlineClientManager, queue *MessageQueue) (string, error) {
 	message := &Message{
 		Source:      srcID,
 		Destination: destID,

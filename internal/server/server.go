@@ -16,7 +16,7 @@ func StartServer(addr string) (net.Listener, error) {
 	return l, nil
 }
 
-func AcceptConnections(l net.Listener, manager *ClientManager) {
+func AcceptConnections(l net.Listener, manager *OnlineClientManager) {
 	defer l.Close()
 
 	queue := NewMessageQueue()

@@ -4,10 +4,10 @@ import (
 	"fmt"
 )
 
-func MessageRouter(message *Message, manager *ClientManager, queue *MessageQueue) string {
+func MessageRouter(message *Message, manager *OnlineClientManager, queue *MessageQueue) string {
 	targetUser, found := manager.FindClientByID(message.Destination)
 	if !found {
-		queue.StoreOfflineMessage(message, manager)
+		queue.StoreOfflineMessage(message)
 
 		return "Message sent but not delivered yet.\n"
 	}

@@ -18,7 +18,7 @@ func NewMessageQueue() *MessageQueue {
 	}
 }
 
-func (queue *MessageQueue) StoreOfflineMessage(message *Message, manager *ClientManager) {
+func (queue *MessageQueue) StoreOfflineMessage(message *Message) {
 	queue.mutex.Lock()
 	defer queue.mutex.Unlock()
 
