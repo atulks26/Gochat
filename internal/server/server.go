@@ -1,6 +1,7 @@
 package server
 
 import (
+	"chat/store/users"
 	"fmt"
 	"log"
 	"net"
@@ -16,7 +17,7 @@ func StartServer(addr string) (net.Listener, error) {
 	return l, nil
 }
 
-func AcceptConnections(l net.Listener, manager *OnlineClientManager) {
+func AcceptConnections(l net.Listener, manager Manager, userTable *users.UserTable) {
 	defer l.Close()
 
 	queue := NewMessageQueue()
@@ -28,6 +29,6 @@ func AcceptConnections(l net.Listener, manager *OnlineClientManager) {
 			return
 		}
 
-		go handleConnection(c, manager, queue)
+		go handleConnection(c, manager, queue, userTable)
 	}
 }

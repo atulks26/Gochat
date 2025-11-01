@@ -2,51 +2,57 @@ package server
 
 import (
 	"bufio"
+	"chat/internal/auth"
 	"chat/internal/helper"
+	"chat/store/users"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
-type User struct {
-	ID       int64
-	Username string
-	Conn     net.Conn
+type Manager interface {
+	auth.OnlineUserChecker
+	ClientFinder
+	ClientLifecycleManager
 }
 
 type Message struct {
 	Source      int64
+	Sender      string
 	Destination int64
 	Mess        string
 	TimeStamp   string
 }
 
-var nextUserID int64 = 0
+func handleConnection(c net.Conn, manager Manager, queue OfflineMessageQueue, userTable users.UserStore) {
+	defer c.Close()
+	reader := bufio.NewReader(c)
 
-func handleConnection(c net.Conn, manager *OnlineClientManager, queue *MessageQueue) {
-	userID := atomic.AddInt64(&nextUserID, 1)
-	user := &User{
-		ID:   userID,
-		Conn: c,
+	user, close := auth.AuthenticateUser(c, reader, userTable, manager)
+	if user == nil {
+		return
+	}
+
+	if close {
+		c.Close()
 	}
 
 	manager.AddClient(user)
 	defer manager.RemoveClient(user)
 
-	log.Printf("New connection: User %d from %s", user.ID, user.Conn.RemoteAddr())
-	defer log.Printf("User %d disconnected", user.ID)
+	log.Printf("New connection: %s", user.Username)
+	defer log.Printf("%s disconnected", user.Username)
 
-	c.Write([]byte(fmt.Sprintf("Welcome, User %d\n", user.ID)))
+	if err := helper.SafeWrite(c, []byte(fmt.Sprintf("Welcome, %s\n", user.Username))); err != nil {
+		return
+	}
 
 	queue.ProcessOfflineMessages(user)
 
-	reader := bufio.NewReader(c)
 	for {
 		rawMessage, err := reader.ReadString('\n')
 		if err != nil {
@@ -54,49 +60,64 @@ func handleConnection(c net.Conn, manager *OnlineClientManager, queue *MessageQu
 				break
 			}
 
-			log.Printf("Error reading from User %d: %v\n", user.ID, err)
+			log.Printf("Error reading from User %d: %v\n", user.UID, err)
+			c.Close()
 			return
 		}
 
-		destID, messageStr, err := validateMessage(rawMessage)
-
+		destUsername, messageStr, err := validateMessage(rawMessage)
 		if err != nil {
-			errResponse := fmt.Sprintf("%s\n", err.Error())
-			c.Write([]byte(errResponse))
-		} else {
-			response, err := sendMessage(user.ID, destID, messageStr, manager, queue)
-			if err != nil {
-				c.Write([]byte(err.Error()))
-				continue
+			if err := helper.SafeWrite(c, []byte(fmt.Sprintf("%v\n", err.Error()))); err != nil {
+				return
 			}
 
-			c.Write([]byte(response))
+			continue
+		}
+
+		destID, exists, err := userTable.FindClientByUsername(destUsername)
+		if err != nil {
+			// handle db error
+		}
+
+		if !exists {
+			if err := helper.SafeWrite(c, []byte("User not found")); err != nil {
+				return
+			}
+		}
+
+		response, err := sendMessage(user.Username, user.UID, destID, messageStr, manager, queue)
+		if err != nil {
+			if err := helper.SafeWrite(c, []byte(err.Error())); err != nil {
+				return
+			}
+
+			continue
+		}
+
+		if err := helper.SafeWrite(c, []byte(response)); err != nil {
+			return
 		}
 	}
 }
 
-func validateMessage(message string) (int64, string, error) {
+func validateMessage(message string) (string, string, error) {
 	trimmedMsg := strings.TrimSpace(message)
 	parts := strings.SplitN(trimmedMsg, " ", 2)
 
 	if len(parts) < 2 {
-		return -1, "", errors.New("invalid format. Use <destination_id> <message>")
+		return "", "", errors.New("invalid format. Use <destination_username> <message>")
 	}
 
-	destIDStr := parts[0]
+	destUsername := parts[0]
 	messageStr := parts[1]
 
-	destID, err := strconv.ParseInt(destIDStr, 10, 64)
-	if err != nil {
-		return -1, "", errors.New("invalid destination_id. It must be a number")
-	}
-
-	return destID, messageStr, nil
+	return destUsername, messageStr, nil
 }
 
-func sendMessage(srcID int64, destID int64, messageStr string, manager *OnlineClientManager, queue *MessageQueue) (string, error) {
+func sendMessage(sender string, srcID int64, destID int64, messageStr string, manager ClientFinder, queue OfflineMessageQueue) (string, error) {
 	message := &Message{
 		Source:      srcID,
+		Sender:      sender,
 		Destination: destID,
 		Mess:        messageStr,
 		TimeStamp:   helper.FormatTime(time.Now()),

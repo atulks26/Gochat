@@ -1,48 +1,52 @@
 package server
 
 import (
+	"chat/internal/auth"
 	"log"
 	"sync"
 )
 
+type ClientFinder interface {
+	FindClientByID(userID int64) (*auth.User, bool)
+}
+
+type ClientLifecycleManager interface {
+	AddClient(user *auth.User)
+	RemoveClient(user *auth.User)
+}
+
 type OnlineClientManager struct {
-	clientsByID map[int64]*User
+	clientsByID map[int64]*auth.User
 	mutex       sync.RWMutex
 }
 
 func NewOnlineClientManager() *OnlineClientManager {
 	return &OnlineClientManager{
-		clientsByID: make(map[int64]*User),
+		clientsByID: make(map[int64]*auth.User),
 	}
 }
 
-func (manager *OnlineClientManager) AddClient(user *User) {
+func (manager *OnlineClientManager) AddClient(user *auth.User) {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-	// find if user is already registered
-
-	// yes: go to enter password
-
-	// no: go to register
-
-	manager.clientsByID[user.ID] = user
-	log.Printf("Added User %d to manager. Total clients: %d", user.ID, len(manager.clientsByID))
+	manager.clientsByID[user.UID] = user
+	log.Printf("Added User %d to manager. Total clients: %d", user.UID, len(manager.clientsByID))
 }
 
-func (manager *OnlineClientManager) RemoveClient(user *User) {
+func (manager *OnlineClientManager) RemoveClient(user *auth.User) {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 
-	_, found := manager.FindClientByID(user.ID)
+	_, found := manager.clientsByID[user.UID]
 	if found {
-		delete(manager.clientsByID, user.ID)
+		delete(manager.clientsByID, user.UID)
 
-		log.Printf("Removed User %d from manager. Total clients: %d", user.ID, len(manager.clientsByID))
+		log.Printf("Removed User %d from manager. Total clients: %d", user.UID, len(manager.clientsByID))
 	}
 }
 
-func (manager *OnlineClientManager) FindClientByID(userID int64) (*User, bool) {
+func (manager *OnlineClientManager) FindClientByID(userID int64) (*auth.User, bool) {
 	manager.mutex.RLock()
 	defer manager.mutex.RUnlock()
 

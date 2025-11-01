@@ -2,10 +2,20 @@ package server
 
 import (
 	"fmt"
-	"strconv"
+	"net"
 	"strings"
 	"sync"
 )
+
+type MessageReceiver interface {
+	ID() int64
+	Connection() net.Conn
+}
+
+type OfflineMessageQueue interface {
+	StoreOfflineMessage(message *Message)
+	ProcessOfflineMessages(user MessageReceiver)
+}
 
 type MessageQueue struct {
 	Buffer map[int64][]string
@@ -27,21 +37,21 @@ func (queue *MessageQueue) StoreOfflineMessage(message *Message) {
 		queue.Buffer[message.Destination] = []string{}
 	}
 
-	offlineMessage := strconv.Itoa(int(message.Source)) + " " + message.Mess
+	offlineMessage := message.Sender + " " + message.Mess
 
 	queue.Buffer[message.Destination] = append(queue.Buffer[message.Destination], offlineMessage)
 }
 
-func (queue *MessageQueue) ProcessOfflineMessages(user *User) {
+func (queue *MessageQueue) ProcessOfflineMessages(user MessageReceiver) {
 	queue.mutex.Lock()
 
-	messages, ok := queue.Buffer[user.ID]
+	messages, ok := queue.Buffer[user.ID()]
 	if !ok {
 		queue.mutex.Unlock()
 		return
 	}
 
-	delete(queue.Buffer, user.ID)
+	delete(queue.Buffer, user.ID())
 	queue.mutex.Unlock()
 
 	for _, message := range messages {
@@ -52,8 +62,8 @@ func (queue *MessageQueue) ProcessOfflineMessages(user *User) {
 		messageStr := parts[1]
 
 		// rep := fmt.Sprintf("(%v) User %d: %v\n", message.TimeStamp, srcIDStr, messageStr)
-		rep := fmt.Sprintf("User %s: %s\n", srcIDStr, messageStr)
+		rep := fmt.Sprintf("%s: %s\n", srcIDStr, messageStr)
 
-		user.Conn.Write([]byte(rep))
+		user.Connection().Write([]byte(rep))
 	}
 }

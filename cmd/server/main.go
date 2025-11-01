@@ -2,6 +2,7 @@ package main
 
 import (
 	"chat/internal/server"
+	"chat/store/users"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,7 @@ func main() {
 	fmt.Println("Server initialized")
 
 	manager := server.NewOnlineClientManager()
+	userTable := users.NewUserTable()
 
-	server.AcceptConnections(listener, manager)
+	server.AcceptConnections(listener, manager, userTable)
 }
