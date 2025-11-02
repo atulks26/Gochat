@@ -80,9 +80,11 @@ func handleConnection(c net.Conn, manager Manager, queue OfflineMessageQueue, us
 		}
 
 		if !exists {
-			if err := helper.SafeWrite(c, []byte("User not found")); err != nil {
+			if err := helper.SafeWrite(c, []byte("User not found\n")); err != nil {
 				return
 			}
+
+			continue
 		}
 
 		response, err := sendMessage(user.Username, user.UID, destID, messageStr, manager, queue)
