@@ -7,7 +7,7 @@ import (
 )
 
 type ClientFinder interface {
-	FindClientByID(userID int64) (*auth.User, bool)
+	FindOnlineClientByID(userID int64) (*auth.User, bool)
 }
 
 type ClientLifecycleManager interface {
@@ -46,7 +46,7 @@ func (manager *OnlineClientManager) RemoveClient(user *auth.User) {
 	}
 }
 
-func (manager *OnlineClientManager) FindClientByID(userID int64) (*auth.User, bool) {
+func (manager *OnlineClientManager) FindOnlineClientByID(userID int64) (*auth.User, bool) {
 	manager.mutex.RLock()
 	defer manager.mutex.RUnlock()
 

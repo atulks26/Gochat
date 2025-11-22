@@ -5,7 +5,7 @@ import (
 )
 
 func MessageRouter(message *Message, manager ClientFinder, queue OfflineMessageQueue) string {
-	targetUser, found := manager.FindClientByID(message.Destination)
+	targetUser, found := manager.FindOnlineClientByID(message.Destination)
 	if !found {
 		queue.StoreOfflineMessage(message)
 

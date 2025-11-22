@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"chat/internal/auth"
 	"chat/internal/helper"
+	"chat/internal/protocol"
 	"chat/store/users"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -32,72 +32,49 @@ func handleConnection(c net.Conn, manager Manager, queue OfflineMessageQueue, us
 	defer c.Close()
 	reader := bufio.NewReader(c)
 
-	user, close := auth.AuthenticateUser(c, reader, userTable, manager)
-	if user == nil {
-		return
-	}
-
-	if close {
-		c.Close()
-	}
-
-	manager.AddClient(user)
-	defer manager.RemoveClient(user)
-
-	log.Printf("New connection: %s", user.Username)
-	defer log.Printf("%s disconnected", user.Username)
-
-	if err := helper.SafeWrite(c, []byte(fmt.Sprintf("Welcome, %s\n", user.Username))); err != nil {
-		return
-	}
-
-	queue.ProcessOfflineMessages(user)
+	var user *auth.User = nil
 
 	for {
-		rawMessage, err := reader.ReadString('\n')
+		frame, err := protocol.FrameRead(reader)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 
-			log.Printf("Error reading from User %d: %v\n", user.UID, err)
-			c.Close()
-			return
+			log.Printf("Error reading frame: %v", err)
+			break
 		}
 
-		destUsername, messageStr, err := validateMessage(rawMessage)
-		if err != nil {
-			if err := helper.SafeWrite(c, []byte(fmt.Sprintf("%v\n", err.Error()))); err != nil {
+		if user == nil {
+			userAuth, err := handleAuth(frame, userTable, manager)
+			if err != nil {
+				errMsg := protocol.EncodeLongString(err.Error())
+
+				err := protocol.FrameWrite(c, protocol.OpError, errMsg)
+				if err != nil {
+					return
+				}
+
+				continue
+			}
+
+			user = userAuth
+
+			manager.AddClient(user)
+			defer manager.RemoveClient(user)
+
+			log.Printf("New connection: %s", user.Username)
+			defer log.Printf("%s disconnected", user.Username)
+
+			authPayload := protocol.EncodeAuthSuccess(user.UID, user.Username)
+			err2 := protocol.FrameWrite(c, protocol.OpAuthSuccess, authPayload)
+			if err2 != nil {
 				return
 			}
 
-			continue
-		}
-
-		destID, exists, err := userTable.FindClientByUsername(destUsername)
-		if err != nil {
-			// handle db error
-		}
-
-		if !exists {
-			if err := helper.SafeWrite(c, []byte("User not found\n")); err != nil {
-				return
-			}
-
-			continue
-		}
-
-		response, err := sendMessage(user.Username, user.UID, destID, messageStr, manager, queue)
-		if err != nil {
-			if err := helper.SafeWrite(c, []byte(err.Error())); err != nil {
-				return
-			}
-
-			continue
-		}
-
-		if err := helper.SafeWrite(c, []byte(response)); err != nil {
-			return
+			queue.ProcessOfflineMessages(user)
+		} else {
+			//send the message
 		}
 	}
 }
@@ -114,6 +91,19 @@ func validateMessage(message string) (string, string, error) {
 	messageStr := parts[1]
 
 	return destUsername, messageStr, nil
+}
+
+func handleAuth(frame *protocol.Frame, userTable users.UserStore, manager Manager) (*auth.User, error) {
+	opCode := frame.OpCode
+
+	switch opCode {
+	case protocol.OpRegister:
+		return auth.ProcessLogin(frame.Payload, userTable, manager)
+	case protocol.OpLogin:
+		return auth.ProcessRegisteration(frame.Payload, userTable)
+	default:
+		return nil, errors.New("user not authenticated")
+	}
 }
 
 func sendMessage(sender string, srcID int64, destID int64, messageStr string, manager ClientFinder, queue OfflineMessageQueue) (string, error) {
