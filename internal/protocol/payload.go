@@ -31,8 +31,8 @@ func EncodeLongString(s string) []byte {
 	return b
 }
 
-func EncodeAuth(username, password string) []byte {
-	return append(EncodeString(username), EncodeString(password)...)
+func EncodeAuth(identity, password string) []byte {
+	return append(EncodeString(identity), EncodeString(password)...)
 }
 
 func EncodeAuthSuccess(uid int64, username string) []byte {
