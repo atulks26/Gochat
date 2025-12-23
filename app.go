@@ -14,6 +14,18 @@ type App struct {
 	c   net.Conn
 }
 
+type AuthUser struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+}
+
+type ChatPreview struct {
+	UserID      int64  `json:"user_id"`
+	Username    string `json:"username"`
+	LastMessage string `json:"last_message"`
+	Time        string `json:"time"`
+}
+
 func NewApp() *App {
 	return &App{}
 }
@@ -26,62 +38,75 @@ func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
 
-func (a *App) Login(username string, password string) (string, error) {
+func (a *App) Login(username string, password string) (*AuthUser, error) {
 	conn, err := net.Dial("tcp", "localhost:8000")
 	if err != nil {
-		return "", errors.New("error establishing connection")
+		return nil, errors.New("error establishing connection")
 	}
 
 	a.c = conn
 
-	payload := protocol.EncodeAuth(username, password)
+	var payload []byte
+
+	payload = protocol.EncodeAuth(payload, username, password)
 	err = protocol.FrameWrite(conn, protocol.OpLogin, payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	frame, err := protocol.FrameRead(conn)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	switch frame.OpCode {
 	case protocol.OpAuthSuccess:
-		return "Login Successful", nil
+		uid, name, err := protocol.DecodeAuthSuccess(frame.Payload)
+		if err != nil {
+			return nil, errors.New("failed to decode success payload")
+		}
+
+		return &AuthUser{ID: uid, Username: name}, nil
 	case protocol.OpError:
 		errMsg, _ := protocol.DecodeLongString(bytes.NewBuffer(frame.Payload))
-		return "", errors.New(errMsg)
+		return nil, errors.New(errMsg)
 	default:
-		return "", errors.New("unexpected server response")
+		return nil, errors.New("unexpected server response")
 	}
 }
 
-func (a *App) Register(email string, password string) (string, error) {
+func (a *App) Register(email string, password string) (*AuthUser, error) {
 	conn, err := net.Dial("tcp", "localhost:8000")
 	if err != nil {
-		return "", errors.New("error establishing connection")
+		return nil, errors.New("error establishing connection")
 	}
 
 	a.c = conn
 
-	payload := protocol.EncodeAuth(email, password)
+	var payload []byte
+	payload = protocol.EncodeAuth(payload, email, password)
 	err = protocol.FrameWrite(conn, protocol.OpRegister, payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	frame, err := protocol.FrameRead(conn)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	switch frame.OpCode {
 	case protocol.OpAuthSuccess:
-		return "Registered successfully", nil
+		uid, name, err := protocol.DecodeAuthSuccess(frame.Payload)
+		if err != nil {
+			return nil, errors.New("failed to decode success payload")
+		}
+
+		return &AuthUser{ID: uid, Username: name}, nil
 	case protocol.OpError:
 		errMsg, _ := protocol.DecodeLongString(bytes.NewBuffer(frame.Payload))
-		return "", errors.New(errMsg)
+		return nil, errors.New(errMsg)
 	default:
-		return "", errors.New("unexpected server response")
+		return nil, errors.New("unexpected server response")
 	}
 }

@@ -2,28 +2,31 @@ package main
 
 import (
 	"chat/internal/server"
-	"chat/store/users"
-	"fmt"
+	"chat/store/postgres"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("please provide a port number")
-	}
-
-	port := ":" + os.Args[1]
-
-	listener, err := server.StartServer(port)
+	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Failed to start server: ", err)
+		log.Println("Error loading .env file")
 	}
 
-	fmt.Println("Server initialized")
+	connStr := os.Getenv("DATABASE_URL")
 
-	manager := server.NewOnlineClientManager()
-	userTable := users.NewUserTable()
+	userStore, err := postgres.NewStore(connStr)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
 
-	server.AcceptConnections(listener, manager, userTable)
+	log.Println("Starting chat server...")
+	listener, err := server.StartServer(":8000")
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+
+	server.AcceptConnections(listener, server.NewOnlineClientManager(), userStore)
 }

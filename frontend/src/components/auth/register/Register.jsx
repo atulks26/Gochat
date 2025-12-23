@@ -1,15 +1,17 @@
 import "./Register.css"
 import { useState } from "react";
 import { Register as GoRegister } from "../../../../wailsjs/go/main/App";
-import { passwordHash } from "../../../utils/passwordHash";
 import { validatePassword } from "../../../utils/validatePassword";
 import { validateEmail } from "../../../utils/validateEmail";
+import { useAuth } from "../../../context/userContext";
 
 const Register = ({changeAuth}) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confPassword, setConfPassword] = useState("");
   const [errMsg, setErrMsg] = useState("");
+
+  const {login} = useAuth();
 
   const handleChangeAuth = () => {
     changeAuth(true);
@@ -24,12 +26,12 @@ const Register = ({changeAuth}) => {
       return;
     }
 
-    const hashedPassword = passwordHash(password);
-
     try {
-      const res = await GoRegister(email, hashedPassword);
+      const user = await GoRegister(email, password);
+      console.log("Server says: ", user);
 
-      console.log("Server says: ", res);
+      login(user);
+      //navigate to chats after login
     } catch (err) {
       console.log(err);
       setErrMsg(err);
@@ -53,8 +55,8 @@ const Register = ({changeAuth}) => {
         <input type="password" value={confPassword} onChange={(e) => setConfPassword(e.target.value)} placeholder="Confirm Password"
         style={{outline: confPassword && confPassword !== password ? "1px solid red" : ""}}/>
 
-        <button type="submit" onClick={handleSubmit}>Continue</button>
-        <p onClick={handleChangeAuth}>Already have an account?</p>        
+        <button onClick={handleSubmit}>Continue</button>
+        <p onClick={handleChangeAuth}>Already have an account?</p>
       </div>
     </div>
   )

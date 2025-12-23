@@ -5,6 +5,8 @@ import (
 	"chat/store/users"
 	"errors"
 	"net"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
@@ -46,8 +48,8 @@ func ProcessLogin(payload []byte, userTable users.UserStore, manager OnlineUserC
 			return nil, err
 		}
 
-		//hash password, then check
-		if password != userdata.HashedPassword {
+		err = bcrypt.CompareHashAndPassword([]byte(userdata.HashedPassword), []byte(password))
+		if err != nil {
 			return nil, errors.New("password incorrect")
 		}
 
@@ -77,8 +79,12 @@ func ProcessRegisteration(payload []byte, userTable users.UserStore) (*User, err
 		return nil, errors.New("username taken")
 	}
 
-	// add password hashing here, or on client side
-	userdata, err := userTable.CreateUser(username, password)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errors.New("failed to hash password")
+	}
+
+	userdata, err := userTable.CreateUser(username, string(passwordHash))
 	if err != nil {
 		return nil, err
 	}

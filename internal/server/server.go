@@ -17,10 +17,10 @@ func StartServer(addr string) (net.Listener, error) {
 	return l, nil
 }
 
-func AcceptConnections(l net.Listener, manager Manager, userTable *users.UserTable) {
+func AcceptConnections(l net.Listener, manager Manager, userTable users.UserStore) {
 	defer l.Close()
 
-	queue := NewMessageQueue()
+	messages := NewMessageHandler()
 
 	for {
 		c, err := l.Accept()
@@ -29,6 +29,6 @@ func AcceptConnections(l net.Listener, manager Manager, userTable *users.UserTab
 			return
 		}
 
-		go handleConnection(c, manager, queue, userTable)
+		go handleConnection(c, manager, messages, userTable)
 	}
 }

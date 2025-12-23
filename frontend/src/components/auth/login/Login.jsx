@@ -1,12 +1,13 @@
 import "./Login.css"
 import { useRef, useState } from "react";
-import { Login as GoLogin } from "../../../../wailsjs/go/main/App"
-import { passwordHash } from "../../../utils/passwordHash";
+import { Login as GoLogin } from "../../../../wailsjs/go/main/App";
+import { useAuth } from "../../../context/userContext";
 
 const Login = ({changeAuth}) => {
   const usernameRef = useRef(null);
   const passwordRef = useRef(null); 
   const [errMsg, setErrMsg] = useState("");
+  const {login} = useAuth();
   
   const handleChangeAuth = () => {
     changeAuth(false);
@@ -19,17 +20,17 @@ const Login = ({changeAuth}) => {
     const username = usernameRef.current.value;
     const password = passwordRef.current.value;
 
-    if (!username || !hashedPassword) return;
-
-    const hashedPassword = passwordHash(password);
+    if (!username || !password) return;
 
     try {
-      const res = await GoLogin(username, hashedPassword);
+      const user = await GoLogin(username, password);
+      console.log("Server says: ", user);
 
-      console.log("Server says: ", res);
+      login(user);
+      //navigate to chats after login
     } catch (err) {
       console.error(err);
-      setErrMsg(err);
+      setErrMsg(err.message);
     }
   }
 
@@ -47,11 +48,11 @@ const Login = ({changeAuth}) => {
 
         <input ref={usernameRef} placeholder="Username or Email"/>
         <input type="password" ref={passwordRef} placeholder="Password"/>
-        <button type="submit" onClick={handleSubmit}>Continue</button>
+        <button onClick={handleSubmit}>Continue</button>
         <p onClick={handleChangeAuth}>Not registered yet?</p>
       </div>
     </div>
   )
 }
 
-export default Login  
+export default Login

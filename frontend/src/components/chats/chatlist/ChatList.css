@@ -1,0 +1,10 @@
+.chat-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-item-body {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
