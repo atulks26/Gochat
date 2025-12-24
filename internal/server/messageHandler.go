@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"chat/internal/protocol"
 	"chat/store/users"
+	"encoding/binary"
 	"net"
 	"sync"
+	"time"
 )
 
 type IncomingMessageQueue interface {
@@ -35,7 +38,7 @@ func (h *MessageHandler) FetchRecentChats(c net.Conn, userID int64, userTable us
 		h.mutex.Unlock()
 	}()
 
-	chat := func(partnerID int64, partnerUsername string, msg *users.Message) error {
+	chat := func(partnerID int64, partnerUsername string, msg *users.MessageStored) error {
 		var payload []byte
 		payload = protocol.EncodeChatListItem(payload, partnerID, partnerUsername, msg)
 
@@ -47,4 +50,29 @@ func (h *MessageHandler) FetchRecentChats(c net.Conn, userID int64, userTable us
 	}
 
 	return protocol.FrameWrite(c, protocol.OpEndOfList, []byte{})
+}
+
+func SendMessage(c net.Conn, uid int64, f protocol.Frame, userTable users.UserStore) error {
+	msg, err := protocol.DecodeChatSend(bytes.NewBuffer(f.Payload))
+	if err != nil {
+		return err
+	}
+
+	msg.Sender_id = uid
+	msg.Timestamp = time.Now().Unix()
+
+	msgID, err := userTable.SaveNewMessage(msg)
+	if err != nil {
+		return err
+	}
+
+	var resp [16]byte
+	binary.BigEndian.PutUint64(resp[0:8], uint64(msgID))
+	binary.BigEndian.PutUint64(resp[8:16], uint64(msg.Timestamp))
+
+	if err := protocol.FrameWrite(c, protocol.OpServerResp, resp[:]); err != nil {
+		return err
+	}
+
+	return nil
 }

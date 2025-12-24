@@ -37,7 +37,7 @@ func (s *Store) GetRecentChats(userID int64, chat users.RecentChat) error {
 	defer rows.Close()
 
 	for rows.Next() {
-		msg := &users.Message{}
+		msg := &users.MessageStored{}
 
 		var partnerID int64
 		var partnerUsername string
@@ -61,4 +61,18 @@ func (s *Store) GetRecentChats(userID int64, chat users.RecentChat) error {
 	}
 
 	return nil
+}
+
+func (s *Store) SaveNewMessage(msg *users.MessageSent) (int64, error) {
+	query := `INSERT INTO messages (sender_id, receiver_id, content, timestamp)
+	VALUES ($1, $2, $3, $4) RETURNING id;`
+
+	var msgID int64
+
+	err := s.db.QueryRow(query, msg.Sender_id, msg.Receiver_id, msg.Content, msg.Timestamp).Scan(&msgID)
+	if err != nil {
+		return 0, err
+	}
+
+	return msgID, nil
 }

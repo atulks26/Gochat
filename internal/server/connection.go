@@ -3,14 +3,13 @@ package server
 import (
 	"bufio"
 	"chat/internal/auth"
-	"chat/internal/helper"
 	"chat/internal/protocol"
 	"chat/store/users"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
-	"time"
 )
 
 type Manager interface {
@@ -78,13 +77,28 @@ func handleConnection(c net.Conn, manager Manager, messages *MessageHandler, use
 			case protocol.OpGetRecentChats:
 				err := messages.FetchRecentChats(c, user.UID, userTable)
 				if err != nil {
-					// add error frame
+					if sendErr := SendError(c, err); sendErr != nil {
+						fmt.Printf("Broken network: %v\n", sendErr)
+						return
+					}
 					continue
 				}
 
-				// get chats of one person
-				// case protocol.OpMessageSend:
+			case protocol.OpMessageSend:
+				err := SendMessage(c, user.UID, *frame, userTable)
+				if err != nil {
+					if sendErr := SendError(c, err); sendErr != nil {
+						fmt.Printf("Broken network: %v\n", sendErr)
+						return
+					}
+					continue
+				}
 
+			default:
+				if sendErr := SendError(c, err); sendErr != nil {
+					fmt.Printf("Broken network: %v\n", sendErr)
+					return
+				}
 			}
 		}
 	}
@@ -103,17 +117,8 @@ func handleAuth(frame *protocol.Frame, userTable users.UserStore, manager Manage
 	}
 }
 
-func sendMessage(sender string, srcID int64, destID int64, messageStr string, manager ClientFinder, queue IncomingMessageQueue) (string, error) {
-	message := &Message{
-		Source:      srcID,
-		Sender:      sender,
-		Destination: destID,
-		Mess:        messageStr,
-		TimeStamp:   helper.FormatTime(time.Now()),
-	}
+func SendError(c net.Conn, err error) error {
+	payload := protocol.EncodeLongString(nil, err.Error())
 
-	// res := MessageRouter(message, manager, queue)
-	log.Printf("Message from User %d to User %d at %v\n", message.Source, message.Destination, message.TimeStamp)
-
-	return "", nil
+	return protocol.FrameWrite(c, protocol.OpError, payload)
 }

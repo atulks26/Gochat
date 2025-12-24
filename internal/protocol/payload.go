@@ -31,7 +31,10 @@ func EncodeLongString(dst []byte, s string) []byte {
 }
 
 func EncodeAuth(dst []byte, identity, password string) []byte {
-	return append(EncodeString(dst, identity), EncodeString(dst, password)...)
+	dst = EncodeString(dst, identity)
+	dst = EncodeString(dst, password)
+
+	return dst
 }
 
 func EncodeAuthSuccess(dst []byte, uid int64, username string) []byte {
@@ -41,10 +44,13 @@ func EncodeAuthSuccess(dst []byte, uid int64, username string) []byte {
 }
 
 func EncodeSendMessage(dst []byte, reciever, message string) []byte {
-	return append(EncodeString(dst, reciever), EncodeLongString(dst, message)...)
+	dst = EncodeString(dst, reciever)
+	dst = EncodeLongString(dst, message)
+
+	return dst
 }
 
-func EncodeReceiveMessage(dst []byte, msg *users.Message) []byte {
+func EncodeReceiveMessage(dst []byte, msg *users.MessageStored) []byte {
 	dst = binary.BigEndian.AppendUint64(dst, uint64(msg.ID))
 	dst = binary.BigEndian.AppendUint64(dst, uint64(msg.Sender_id))
 	dst = binary.BigEndian.AppendUint64(dst, uint64(msg.Timestamp))
@@ -65,7 +71,7 @@ func EncodeReceiveMessage(dst []byte, msg *users.Message) []byte {
 	return dst
 }
 
-func EncodeChatListItem(dst []byte, partnerID int64, partnerUsername string, msg *users.Message) []byte {
+func EncodeChatListItem(dst []byte, partnerID int64, partnerUsername string, msg *users.MessageStored) []byte {
 	dst = binary.BigEndian.AppendUint64(dst, uint64(partnerID))
 
 	if len(partnerUsername) > 255 {
@@ -111,16 +117,87 @@ func DecodeLongString(b *bytes.Buffer) (string, error) {
 	return string(b.Next(lenB)), nil
 }
 
-// make separate parser for registeration later
-func ParseAuth(payload []byte) (string, string, error) {
-	buf := bytes.NewBuffer(payload)
+func DecodeChatListItem(b *bytes.Buffer) (*users.ChatPreview, error) {
+	chat := &users.ChatPreview{
+		Message: &users.MessageStored{},
+	}
 
-	username, err := DecodeString(buf)
+	var reader [8]byte
+
+	if _, err := b.Read(reader[:]); err != nil {
+		return nil, errors.New("error reading partner id")
+	}
+	chat.PartnerID = int64(binary.BigEndian.Uint64(reader[:]))
+
+	username, err := DecodeString(b)
+	if err != nil {
+		return nil, err
+	}
+	chat.PartnerUsername = username
+
+	if _, err := b.Read(reader[:]); err != nil {
+		return nil, errors.New("error reading message id")
+	}
+	chat.Message.ID = int64(binary.BigEndian.Uint64(reader[:]))
+
+	if _, err := b.Read(reader[:]); err != nil {
+		return nil, errors.New("error reading sender id")
+	}
+	chat.Message.Sender_id = int64(binary.BigEndian.Uint64(reader[:]))
+
+	if _, err := b.Read(reader[:]); err != nil {
+		return nil, errors.New("error reading timestamp")
+	}
+	chat.Message.Timestamp = int64(binary.BigEndian.Uint64(reader[:]))
+
+	flag, err := b.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	chat.Message.Is_read = (flag == 1)
+
+	flag, err = b.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	chat.Message.Is_delivered = (flag == 1)
+
+	content, err := DecodeLongString(b)
+	if err != nil {
+		return nil, err
+	}
+	chat.Message.Content = content
+
+	return chat, nil
+}
+
+func DecodeChatSend(b *bytes.Buffer) (*users.MessageSent, error) {
+	msg := &users.MessageSent{}
+
+	var reader [8]byte
+
+	if _, err := b.Read(reader[:]); err != nil {
+		return nil, errors.New("error reading receiver id")
+	}
+	msg.Receiver_id = int64(binary.BigEndian.Uint64(reader[:]))
+
+	content, err := DecodeLongString(b)
+	if err != nil {
+		return nil, err
+	}
+
+	msg.Content = content
+
+	return msg, nil
+}
+
+func ParseAuth(b *bytes.Buffer) (string, string, error) {
+	username, err := DecodeString(b)
 	if err != nil {
 		return "", "", err
 	}
 
-	password, err := DecodeString(buf)
+	password, err := DecodeString(b)
 	if err != nil {
 		return "", "", err
 	}
@@ -128,22 +205,20 @@ func ParseAuth(payload []byte) (string, string, error) {
 	return username, password, nil
 }
 
-func DecodeAuthSuccess(payload []byte) (int64, string, error) {
-	if len(payload) < 9 {
+func DecodeAuthSuccess(b *bytes.Buffer) (int64, string, error) {
+	if b.Len() < 9 {
 		return 0, "", errors.New("payload too short")
 	}
 
-	buf := bytes.NewBuffer(payload)
-
 	uidBytes := make([]byte, 8)
-	_, err := buf.Read(uidBytes)
+	_, err := b.Read(uidBytes)
 	if err != nil {
 		return 0, "", err
 	}
 
 	uid := int64(binary.BigEndian.Uint64(uidBytes))
 
-	username, err := DecodeString(buf)
+	username, err := DecodeString(b)
 	if err != nil {
 		return 0, "", err
 	}

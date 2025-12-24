@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"chat/internal/protocol"
 	"chat/store/users"
 	"errors"
@@ -28,7 +29,7 @@ func (u *User) Connection() net.Conn {
 }
 
 func ProcessLogin(payload []byte, userTable users.UserStore, manager OnlineUserChecker) (*User, error) {
-	username, password, err := protocol.ParseAuth(payload)
+	username, password, err := protocol.ParseAuth(bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,7 @@ func ProcessLogin(payload []byte, userTable users.UserStore, manager OnlineUserC
 }
 
 func ProcessRegisteration(payload []byte, userTable users.UserStore) (*User, error) {
-	username, password, err := protocol.ParseAuth(payload)
+	username, password, err := protocol.ParseAuth(bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}
